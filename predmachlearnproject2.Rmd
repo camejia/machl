@@ -1,0 +1,93 @@
+---
+title: "PredictiveMachineLearningProject"
+author: "Logan Cerkovnik"
+date: "Tuesday, June 16, 2015"
+output:
+  html_document: default
+ 
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+Executive Summary :
+
+The dataset for the graded dumbbell bicep curls represents a difficult high dimensional multivariable multiclass classification problem.  The variables present in this dataset also appear to have biomodal non-gaussian distributions.  As expected, linear models performed poorly on this problem. A random forest model predicted the correct class with a misclassification rate of less than 2% on the the holdold test set. 
+
+Loading Data 
+```{r}
+
+dumbbelldat <- read.csv("pml-training.csv")
+#dumbbelldat <- dumbbelldat[8:160]
+library(caret)
+library(randomForest)
+library(ggplot2)
+```
+
+Preprocessing Data
+
+So first I will remove all of the variables except the raw signal measurements. This was done to avoid the problems with the transform variables such as standardard deviation that would have to be recalculated for all of the raw signal measurements.
+
+Then a training set will be created using the Caret package to randomly partion the training data into a training and test set.
+```{r}
+#dumbbelldat <- dumbbelldat[8:160]
+newdat <- dumbbelldat[c("classe", "roll_belt", "pitch_belt", "yaw_belt", "total_accel_belt", "gyros_belt_x", "gyros_belt_y", "gyros_belt_z", "accel_belt_x", "accel_belt_y", "accel_belt_z", "magnet_belt_x", "magnet_belt_y", "magnet_belt_z", "roll_arm", "pitch_arm", "yaw_arm", "total_accel_arm", "gyros_arm_x","gyros_arm_y", "gyros_arm_z", "accel_arm_x", "accel_arm_y", "accel_arm_z", "magnet_arm_x", "magnet_arm_y", "magnet_arm_z", "roll_dumbbell", "pitch_dumbbell", "yaw_dumbbell", "total_accel_dumbbell")]
+inTrain <- createDataPartition(y = newdat$classe, p=0.75, list=FALSE)
+training <- newdat[inTrain, ]
+testing <- newdat[-inTrain, ]
+remove(dumbelldat)
+
+
+```
+Examining the Gaussian kernel density by class suggests that this will be a very difficult problem for tradition linear gaussian models because the distribution density appears to be bimodal in many instances.  The 4 most important variables for a partial least squares model is displayed on the first row below followed by a the random forest importance variables on the second row.
+
+```{r}
+library(gridExtra)
+
+g5<- ggplot(newdat, aes(x= classe, y=roll_dumbbell))
+#g5+geom_violin(alpha=0.5, color="gray")+coord_flip()
+g6<- ggplot(newdat, aes(x= classe, y=magnet_arm_x))
+#g6+geom_violin(alpha=0.5, color="gray")+coord_flip()
+g7<- ggplot(newdat, aes(x= classe, y=magnet_arm_y))
+#g7+geom_violin(alpha=0.5, color="gray")+coord_flip()
+g8<- ggplot(newdat, aes(x= classe, y=accel_arm_x))
+#g8+geom_violin(alpha=0.5, color="gray")+coord_flip()
+g9<- ggplot(newdat, aes(x= classe, y=roll_belt))
+#g9+geom_violin(alpha=0.5, color="gray")+coord_flip()
+g10<- ggplot(newdat, aes(x= classe, y=pitch_belt))
+#g10+geom_violin(alpha=0.5, color="gray")+coord_flip()
+g11<- ggplot(newdat, aes(x= classe, y=roll_dumbbell))
+#g11+geom_violin(alpha=0.5, color="gray")+coord_flip()
+g12<- ggplot(newdat, aes(x= classe, yaw_belt ))
+#g12+geom_violin(alpha=0.5, color="gray")+coord_flip()
+pushViewport(viewport(layout = grid.layout(2, 4)))
+#print(g+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+
+print(g5+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 1, layout.pos.col = 1))
+print(g6+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 1, layout.pos.col = 2))
+print(g7+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 1, layout.pos.col = 3))
+print(g8+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 1, layout.pos.col = 4))
+print(g9+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 2, layout.pos.col = 1))
+print(g10+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 2, layout.pos.col = 2))
+print(g11+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 2, layout.pos.col = 3))
+print(g12+geom_violin(alpha=0.5, color="gray")+coord_flip(), vp = viewport(layout.pos.row = 2, layout.pos.col = 4))
+remove(newdat)
+```
+Training Machine Learning Algorithms 
+
+Several Machine Learning Algorithms were tested. 
+The best approach resulted from using a randomforest built using crossvalidation on the out of bag error using mytry = 8
+```{r, results ='hide'}
+randforest <- train(training$classe ~ ., data = training, method = "rf", tuneLength =50, trControl = trainControl(method ="oob"), preProcess = c("center", "scale"))
+linearmod <- train(training$classe ~ ., data = training, preProcess = c("center", "scale"),  method = "pls", trControl = trainControl(method ="repeatedcv", repeats=5))
+
+```
+Testing Machine Learning Algorithms on Holdout Set
+```{r}
+predictionsrf <- predict(randforest, testing)
+predictionslinearmod <- predict(linearmod, testing)
+outofsampleaccuracyrf <- sum(predictionsrf == testing$classe)/length(testing$class)
+outofsampleaccuracylinearmod <- sum(predictionslinearmod == testing$class)/length(testing$class)
+outofsampleaccuracyrf
+outofsampleaccuracylinearmod
+```
+It appears that as expected the linear partial least squares model performs poorly.The random forest model performs classification much more accurately on the test set.  
